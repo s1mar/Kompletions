@@ -2,9 +2,15 @@ package com.s1mar.kompletions
 
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.descriptors.buildClassSerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.*
 
 @Serializable
 data class ChatRequest(
@@ -21,24 +27,31 @@ data class ChatRequest(
     val user: String? = null,
     @SerialName("response_format") val responseFormat: ResponseFormat? = null,
     val tools: List<Tool>? = null,
-    @SerialName("tool_choice") val toolChoice: String? = null
+    @SerialName("tool_choice") val toolChoice: String? = null,
+    val seed: Int? = null,
+    @SerialName("stream_options") val streamOptions: StreamOptions? = null,
+    @SerialName("parallel_tool_calls") val parallelToolCalls: Boolean? = null
 )
 
 @Serializable
 data class Message(
     val role: String,
-    val content: String? = null,
-    val name: String? = null
+    val content: Content? = null,
+    val name: String? = null,
+    @SerialName("tool_calls") val toolCalls: List<ToolCall>? = null,
+    @SerialName("tool_call_id") val toolCallId: String? = null
 )
 
 @Serializable
 data class ResponseFormat(
-    val type: String
+    val type: String,
+    @SerialName("json_schema") val jsonSchema: JsonSchema? = null
 )
 
 @Serializable
 data class Tool(
-    val type: String = "function",
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @EncodeDefault val type: String = "function",
     val function: FunctionDef
 )
 
@@ -48,6 +61,134 @@ data class FunctionDef(
     val description: String? = null,
     val parameters: JsonElement? = null
 )
+
+@Serializable
+data class ToolCall(
+    val id: String,
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @EncodeDefault val type: String = "function",
+    val function: ToolCallFunction
+)
+
+@Serializable
+data class ToolCallFunction(
+    val name: String,
+    val arguments: String
+)
+
+@Serializable
+data class JsonSchema(
+    val name: String,
+    val schema: JsonElement,
+    val strict: Boolean? = null,
+    val description: String? = null
+)
+
+@Serializable
+data class StreamOptions(
+    @SerialName("include_usage") val includeUsage: Boolean
+)
+
+/**
+ * Represents message content that can be either plain text or multi-part (text + images).
+ * Serializes as a JSON string for [Text] or a JSON array for [Parts].
+ */
+@Serializable(with = ContentSerializer::class)
+sealed interface Content {
+    /** Plain text content — serializes as a JSON string. */
+    data class Text(val text: String) : Content
+    /** Multi-part content (text + images) — serializes as a JSON array. */
+    data class Parts(val parts: List<ContentPart>) : Content
+}
+
+/** Extract the text from any [Content] variant. */
+val Content.text: String?
+    get() = when (this) {
+        is Content.Text -> text
+        is Content.Parts -> parts.filterIsInstance<ContentPart.TextPart>()
+            .joinToString("") { it.text }.ifEmpty { null }
+    }
+
+sealed interface ContentPart {
+    @Serializable
+    data class TextPart(val text: String) : ContentPart
+
+    @Serializable
+    data class ImagePart(
+        @SerialName("image_url") val imageUrl: ImageUrl
+    ) : ContentPart
+}
+
+@Serializable
+data class ImageUrl(
+    val url: String,
+    val detail: String? = null
+)
+
+object ContentSerializer : KSerializer<Content> {
+    override val descriptor: SerialDescriptor = buildClassSerialDescriptor("Content")
+
+    override fun serialize(encoder: Encoder, value: Content) {
+        val jsonEncoder = encoder as JsonEncoder
+        when (value) {
+            is Content.Text -> jsonEncoder.encodeJsonElement(JsonPrimitive(value.text))
+            is Content.Parts -> {
+                val array = buildJsonArray {
+                    for (part in value.parts) {
+                        when (part) {
+                            is ContentPart.TextPart -> addJsonObject {
+                                put("type", "text")
+                                put("text", part.text)
+                            }
+                            is ContentPart.ImagePart -> addJsonObject {
+                                put("type", "image_url")
+                                putJsonObject("image_url") {
+                                    put("url", part.imageUrl.url)
+                                    part.imageUrl.detail?.let { put("detail", it) }
+                                }
+                            }
+                        }
+                    }
+                }
+                jsonEncoder.encodeJsonElement(array)
+            }
+        }
+    }
+
+    override fun deserialize(decoder: Decoder): Content {
+        val jsonDecoder = decoder as JsonDecoder
+        return when (val element = jsonDecoder.decodeJsonElement()) {
+            is JsonPrimitive -> Content.Text(element.content)
+            is JsonArray -> {
+                val parts = element.map { partElement ->
+                    val obj = partElement.jsonObject
+                    when (obj["type"]?.jsonPrimitive?.content) {
+                        "text" -> ContentPart.TextPart(
+                            text = obj["text"]!!.jsonPrimitive.content
+                        )
+                        "image_url" -> ContentPart.ImagePart(
+                            imageUrl = ImageUrl(
+                                url = obj["image_url"]!!.jsonObject["url"]!!.jsonPrimitive.content,
+                                detail = obj["image_url"]!!.jsonObject["detail"]?.jsonPrimitive?.contentOrNull
+                            )
+                        )
+                        else -> throw IllegalArgumentException(
+                            "Unknown content part type: ${obj["type"]}"
+                        )
+                    }
+                }
+                Content.Parts(parts)
+            }
+            else -> throw IllegalArgumentException(
+                "Unexpected JSON element for content: ${element::class.simpleName}"
+            )
+        }
+    }
+}
+
+/** Convenience: get the text content of a message as a plain String. */
+val Message.textContent: String?
+    get() = content?.text
 
 @Serializable
 data class ChatResponse(
@@ -84,8 +225,8 @@ suspend fun KompletionClient.sendMessage(
     maxTokens: Int? = null
 ): ChatResponse {
     val messages = buildList {
-        systemPrompt?.let { add(Message("system", it)) }
-        add(Message("user", message))
+        systemPrompt?.let { add(Message("system", Content.Text(it))) }
+        add(Message("user", Content.Text(message)))
     }
 
     val request = ChatRequest(
@@ -125,8 +266,12 @@ class ChatRequestBuilder {
     var responseFormat: ResponseFormat? = null
     var tools: List<Tool>? = null
     var toolChoice: String? = null
+    var seed: Int? = null
+    var streamOptions: StreamOptions? = null
+    var parallelToolCalls: Boolean? = null
 
     private val messageList = mutableListOf<Message>()
+    private val toolList = mutableListOf<Tool>()
 
     /** Prepopulate the message list from an existing history (e.g., from a previous conversation). */
     fun messages(history: List<Message>) {
@@ -134,24 +279,74 @@ class ChatRequestBuilder {
     }
 
     fun system(content: String) {
-        messageList.add(Message("system", content))
+        messageList.add(Message("system", Content.Text(content)))
     }
 
     fun user(content: String) {
-        messageList.add(Message("user", content))
+        messageList.add(Message("user", Content.Text(content)))
     }
 
     fun assistant(content: String) {
-        messageList.add(Message("assistant", content))
+        messageList.add(Message("assistant", Content.Text(content)))
     }
 
     fun message(role: String, content: String? = null, name: String? = null) {
-        messageList.add(Message(role, content, name))
+        messageList.add(Message(role, content?.let { Content.Text(it) }, name))
+    }
+
+    /** Add a user message with both text and image content. */
+    fun userWithImages(text: String, imageUrls: List<String>, detail: String? = null) {
+        val parts = buildList<ContentPart> {
+            add(ContentPart.TextPart(text))
+            imageUrls.forEach { url ->
+                add(ContentPart.ImagePart(ImageUrl(url, detail)))
+            }
+        }
+        messageList.add(Message("user", Content.Parts(parts)))
+    }
+
+    /** Define a tool (function) the model can call. */
+    fun tool(name: String, description: String? = null, parameters: JsonElement? = null) {
+        toolList.add(Tool(function = FunctionDef(name = name, description = description, parameters = parameters)))
+    }
+
+    /** Add a tool-result message to provide the output of a tool call back to the model. */
+    fun toolResult(toolCallId: String, content: String) {
+        messageList.add(Message(role = "tool", content = Content.Text(content), toolCallId = toolCallId))
+    }
+
+    /** Add an assistant message containing tool calls (for replaying a tool-calling turn). */
+    fun assistantToolCalls(toolCalls: List<ToolCall>) {
+        messageList.add(Message(role = "assistant", toolCalls = toolCalls))
+    }
+
+    /** Enable JSON mode (response_format: {"type": "json_object"}). */
+    fun jsonMode() {
+        responseFormat = ResponseFormat(type = "json_object")
+    }
+
+    /** Enable structured output with a JSON Schema. */
+    fun structuredOutput(
+        name: String,
+        schema: JsonElement,
+        strict: Boolean? = true,
+        description: String? = null
+    ) {
+        responseFormat = ResponseFormat(
+            type = "json_schema",
+            jsonSchema = JsonSchema(name = name, schema = schema, strict = strict, description = description)
+        )
     }
 
     internal fun build(): ChatRequest {
         require(model.isNotEmpty()) { "Model must be specified" }
         require(messageList.isNotEmpty()) { "At least one message is required" }
+
+        val allTools = when {
+            toolList.isNotEmpty() && tools != null -> tools!! + toolList
+            toolList.isNotEmpty() -> toolList.toList()
+            else -> tools
+        }
 
         return ChatRequest(
             model = model,
@@ -165,8 +360,11 @@ class ChatRequestBuilder {
             user = endUser,
             n = n,
             responseFormat = responseFormat,
-            tools = tools,
-            toolChoice = toolChoice
+            tools = allTools,
+            toolChoice = toolChoice,
+            seed = seed,
+            streamOptions = streamOptions,
+            parallelToolCalls = parallelToolCalls
         )
     }
 }
@@ -184,8 +382,7 @@ suspend fun KompletionClient.chatCompletion(
 /**
  * Multi-turn conversation with automatic message history management.
  *
- * Thread safety: Concurrent calls to [send]/[sendFull] are serialized via a mutex.
- * [addMessage], [clearHistory], and [getHistory] are not synchronized with send operations.
+ * Thread safety: All mutating operations are serialized via a mutex.
  *
  * @param client The KompletionClient to use for API calls.
  * @param model The model name to use for completions.
@@ -206,11 +403,11 @@ class Conversation(
     init {
         if (initialHistory != null) {
             if (systemPrompt != null && (initialHistory.isEmpty() || initialHistory[0].role != "system")) {
-                messages.add(Message("system", systemPrompt))
+                messages.add(Message("system", Content.Text(systemPrompt)))
             }
             messages.addAll(initialHistory)
         } else {
-            systemPrompt?.let { messages.add(Message("system", it)) }
+            systemPrompt?.let { messages.add(Message("system", Content.Text(it))) }
         }
     }
 
@@ -219,7 +416,7 @@ class Conversation(
      * Returns an empty string if the assistant's content is null (e.g., tool calls).
      */
     suspend fun send(message: String): String {
-        return sendFull(message).choices.first().message.content ?: ""
+        return sendFull(message).choices.first().message.textContent ?: ""
     }
 
     /**
@@ -228,13 +425,39 @@ class Conversation(
      * On failure, the user message is rolled back from history.
      */
     suspend fun sendFull(message: String): ChatResponse = sendMutex.withLock {
-        messages.add(Message("user", message))
+        messages.add(Message("user", Content.Text(message)))
         try {
             val request = ChatRequest(model = model, messages = messages.toList())
             val response: ChatResponse = client.chat(request)
             val assistantMsg = response.choices.firstOrNull()?.message
                 ?: throw KompletionException("No choices returned in API response")
-            messages.add(Message(assistantMsg.role, assistantMsg.content, assistantMsg.name))
+            messages.add(assistantMsg)
+            response
+        } catch (e: Exception) {
+            messages.removeAt(messages.lastIndex)
+            throw e
+        }
+    }
+
+    /**
+     * Add a tool result and send the conversation to the model for a follow-up response.
+     * Returns the assistant's text reply (or empty string for another tool call).
+     */
+    suspend fun addToolResult(toolCallId: String, content: String): String {
+        return addToolResultFull(toolCallId, content).choices.first().message.textContent ?: ""
+    }
+
+    /**
+     * Add a tool result and get the full API response.
+     */
+    suspend fun addToolResultFull(toolCallId: String, content: String): ChatResponse = sendMutex.withLock {
+        messages.add(Message(role = "tool", content = Content.Text(content), toolCallId = toolCallId))
+        try {
+            val request = ChatRequest(model = model, messages = messages.toList())
+            val response: ChatResponse = client.chat(request)
+            val assistantMsg = response.choices.firstOrNull()?.message
+                ?: throw KompletionException("No choices returned in API response")
+            messages.add(assistantMsg)
             response
         } catch (e: Exception) {
             messages.removeAt(messages.lastIndex)
@@ -244,7 +467,12 @@ class Conversation(
 
     /** Inject a message into the history without making an API call. */
     suspend fun addMessage(role: String, content: String? = null, name: String? = null) = sendMutex.withLock {
-        messages.add(Message(role, content, name))
+        messages.add(Message(role, content?.let { Content.Text(it) }, name))
+    }
+
+    /** Inject a pre-built message into the history without making an API call. */
+    suspend fun addMessage(message: Message) = sendMutex.withLock {
+        messages.add(message)
     }
 
     /** Remove all messages from the history. */

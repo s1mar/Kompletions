@@ -1,9 +1,11 @@
 package com.s1mar.kompletions
 
+import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class ChatRequestBuilderTest {
 
@@ -17,7 +19,7 @@ class ChatRequestBuilderTest {
         assertEquals("gpt-4", request.model)
         assertEquals(1, request.messages.size)
         assertEquals("user", request.messages[0].role)
-        assertEquals("Hello", request.messages[0].content)
+        assertEquals("Hello", request.messages[0].textContent)
     }
 
     @Test
@@ -52,6 +54,7 @@ class ChatRequestBuilderTest {
             n = 2
             responseFormat = ResponseFormat("json_object")
             toolChoice = "auto"
+            seed = 42
             system("System prompt")
             user("User message")
         }.build()
@@ -66,6 +69,7 @@ class ChatRequestBuilderTest {
         assertEquals(2, request.n)
         assertEquals("json_object", request.responseFormat?.type)
         assertEquals("auto", request.toolChoice)
+        assertEquals(42, request.seed)
     }
 
     @Test
@@ -93,7 +97,7 @@ class ChatRequestBuilderTest {
         }.build()
 
         assertEquals("tool", request.messages[0].role)
-        assertEquals("result data", request.messages[0].content)
+        assertEquals("result data", request.messages[0].textContent)
         assertEquals("get_weather", request.messages[0].name)
     }
 
@@ -116,14 +120,17 @@ class ChatRequestBuilderTest {
         assertNull(request.responseFormat)
         assertNull(request.tools)
         assertNull(request.toolChoice)
+        assertNull(request.seed)
+        assertNull(request.streamOptions)
+        assertNull(request.parallelToolCalls)
     }
 
     @Test
     fun `messages() prepopulates history before new messages`() {
         val history = listOf(
-            Message("system", "You are helpful"),
-            Message("user", "Previous question"),
-            Message("assistant", "Previous answer")
+            Message("system", Content.Text("You are helpful")),
+            Message("user", Content.Text("Previous question")),
+            Message("assistant", Content.Text("Previous answer"))
         )
         val request = ChatRequestBuilder().apply {
             model = "gpt-4"
@@ -133,8 +140,127 @@ class ChatRequestBuilderTest {
 
         assertEquals(4, request.messages.size)
         assertEquals("system", request.messages[0].role)
-        assertEquals("Previous question", request.messages[1].content)
-        assertEquals("Previous answer", request.messages[2].content)
-        assertEquals("Follow-up question", request.messages[3].content)
+        assertEquals("Previous question", request.messages[1].textContent)
+        assertEquals("Previous answer", request.messages[2].textContent)
+        assertEquals("Follow-up question", request.messages[3].textContent)
+    }
+
+    // --- Tool DSL tests ---
+
+    @Test
+    fun `tool() adds tool to request`() {
+        val params = Json.parseToJsonElement("""{"type":"object","properties":{"city":{"type":"string"}}}""")
+        val request = ChatRequestBuilder().apply {
+            model = "gpt-4"
+            user("What's the weather?")
+            tool("get_weather", "Get weather for a city", params)
+        }.build()
+
+        val tools = request.tools
+        assertEquals(1, tools?.size)
+        assertEquals("get_weather", tools?.get(0)?.function?.name)
+        assertEquals("function", tools?.get(0)?.type)
+        assertEquals("Get weather for a city", tools?.get(0)?.function?.description)
+    }
+
+    @Test
+    fun `tool() merges with explicitly set tools`() {
+        val request = ChatRequestBuilder().apply {
+            model = "gpt-4"
+            user("Hello")
+            tools = listOf(Tool(function = FunctionDef(name = "existing_tool")))
+            tool("new_tool", "A new tool")
+        }.build()
+
+        val mergedTools = request.tools
+        assertEquals(2, mergedTools?.size)
+        assertEquals("existing_tool", mergedTools?.get(0)?.function?.name)
+        assertEquals("new_tool", mergedTools?.get(1)?.function?.name)
+    }
+
+    @Test
+    fun `toolResult() adds tool message with tool_call_id`() {
+        val request = ChatRequestBuilder().apply {
+            model = "gpt-4"
+            toolResult("call_123", """{"temp": 72}""")
+        }.build()
+
+        assertEquals("tool", request.messages[0].role)
+        assertEquals("call_123", request.messages[0].toolCallId)
+        assertEquals("""{"temp": 72}""", request.messages[0].textContent)
+    }
+
+    @Test
+    fun `assistantToolCalls() adds assistant message with tool calls`() {
+        val calls = listOf(
+            ToolCall(id = "call_1", function = ToolCallFunction("get_weather", """{"city":"NYC"}"""))
+        )
+        val request = ChatRequestBuilder().apply {
+            model = "gpt-4"
+            assistantToolCalls(calls)
+            toolResult("call_1", """{"temp": 65}""")
+        }.build()
+
+        assertEquals("assistant", request.messages[0].role)
+        assertNull(request.messages[0].content)
+        assertEquals(1, request.messages[0].toolCalls?.size)
+        assertEquals("tool", request.messages[1].role)
+    }
+
+    // --- Structured output DSL tests ---
+
+    @Test
+    fun `jsonMode() sets response format`() {
+        val request = ChatRequestBuilder().apply {
+            model = "gpt-4"
+            user("Give me JSON")
+            jsonMode()
+        }.build()
+
+        assertEquals("json_object", request.responseFormat?.type)
+        assertNull(request.responseFormat?.jsonSchema)
+    }
+
+    @Test
+    fun `structuredOutput() sets json_schema response format`() {
+        val schema = Json.parseToJsonElement("""{"type":"object"}""")
+        val request = ChatRequestBuilder().apply {
+            model = "gpt-4"
+            user("Extract data")
+            structuredOutput("my_schema", schema)
+        }.build()
+
+        assertEquals("json_schema", request.responseFormat?.type)
+        assertEquals("my_schema", request.responseFormat?.jsonSchema?.name)
+        assertEquals(true, request.responseFormat?.jsonSchema?.strict)
+    }
+
+    // --- Vision DSL tests ---
+
+    @Test
+    fun `userWithImages() creates multipart content`() {
+        val request = ChatRequestBuilder().apply {
+            model = "gpt-4o"
+            userWithImages("What's in this image?", listOf("https://example.com/img.png"), detail = "high")
+        }.build()
+
+        assertEquals("user", request.messages[0].role)
+        assertTrue(request.messages[0].content is Content.Parts)
+        val parts = (request.messages[0].content as Content.Parts).parts
+        assertEquals(2, parts.size)
+        assertTrue(parts[0] is ContentPart.TextPart)
+        assertTrue(parts[1] is ContentPart.ImagePart)
+        assertEquals("high", (parts[1] as ContentPart.ImagePart).imageUrl.detail)
+    }
+
+    @Test
+    fun `userWithImages() supports multiple images`() {
+        val request = ChatRequestBuilder().apply {
+            model = "gpt-4o"
+            userWithImages("Compare these", listOf("https://a.com/1.png", "https://b.com/2.png"))
+        }.build()
+
+        val parts = (request.messages[0].content as Content.Parts).parts
+        assertEquals(3, parts.size) // 1 text + 2 images
     }
 }

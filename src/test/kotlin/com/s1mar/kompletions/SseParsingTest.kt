@@ -46,7 +46,7 @@ class SseParsingTest {
         """.trimIndent()
 
         val client = createMockClient(sseData)
-        val request = ChatRequest(model = "test", messages = listOf(Message("user", "hi")), stream = true)
+        val request = ChatRequest(model = "test", messages = listOf(Message("user", Content.Text("hi"))), stream = true)
         
         val chunks = client.streamChat(request).toList()
         
@@ -72,7 +72,7 @@ class SseParsingTest {
         """.trimIndent()
 
         val client = createMockClient(sseData)
-        val request = ChatRequest(model = "test", messages = listOf(Message("user", "hi")), stream = true)
+        val request = ChatRequest(model = "test", messages = listOf(Message("user", Content.Text("hi"))), stream = true)
         
         val chunks = client.streamChat(request).toList()
         

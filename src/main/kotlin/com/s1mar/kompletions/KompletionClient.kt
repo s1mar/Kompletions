@@ -75,7 +75,12 @@ class KompletionClient(
             throw KompletionApiException(response.status.value, body)
         }
 
-        return response.body()
+        val body = response.bodyAsText()
+        try {
+            return json.decodeFromString(ChatResponse.serializer(), body)
+        } catch (e: Exception) {
+            throw KompletionException("Failed to parse API response: ${e.message}\nRaw body: $body", e)
+        }
     }
 
     /**
@@ -145,7 +150,7 @@ class KompletionClient(
                     Provider.OPENAI, Provider.CUSTOM -> append("Authorization", "Bearer $key")
                     Provider.OPENROUTER -> {
                         append("Authorization", "Bearer $key")
-                        append("HTTP-Referer", config.appUrl ?: "https://github.com/s1mar/kompletion")
+                        config.appUrl?.let { append("HTTP-Referer", it) }
                         config.appName?.let { append("X-Title", it) }
                     }
                     Provider.OLLAMA -> {}

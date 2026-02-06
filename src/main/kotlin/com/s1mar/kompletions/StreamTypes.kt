@@ -23,5 +23,20 @@ data class ChunkChoice(
 @Serializable
 data class ChunkDelta(
     val role: String? = null,
-    val content: String? = null
+    val content: String? = null,
+    @SerialName("tool_calls") val toolCalls: List<ToolCallChunkDelta>? = null
+)
+
+@Serializable
+data class ToolCallChunkDelta(
+    val index: Int,
+    val id: String? = null,
+    val type: String? = null,
+    val function: ToolCallChunkFunction? = null
+)
+
+@Serializable
+data class ToolCallChunkFunction(
+    val name: String? = null,
+    val arguments: String? = null
 )

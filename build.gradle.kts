@@ -3,6 +3,7 @@ import java.net.URI
 plugins {
     kotlin("jvm") version "2.3.0"
     kotlin("plugin.serialization") version "2.3.0"
+    id("org.openapi.generator") version "7.19.0"
 }
 
 group = "com.s1mar.kompletions"
@@ -18,7 +19,7 @@ val kotlinxSerializationVersion = "1.6.2"
 // Configuration for OpenAPI spec
 val openApiSpecDir = layout.buildDirectory.dir("openapi-spec").get().asFile
 val openApiSpecFile = File(openApiSpecDir, "openai-spec.yaml")
-val defaultSpecUrl = "https://raw.githubusercontent.com/openai/openai-openapi/manual_spec/openapi.yaml"
+val defaultSpecUrl = "https://app.stainless.com/api/spec/documented/openai/openapi.documented.yml"
 
 val specUrl: String = (project.properties["specUrl"] as? String) ?: defaultSpecUrl
 val customSpecFile: String? = project.properties["customSpecFile"] as? String
@@ -26,7 +27,7 @@ val customSpecFile: String? = project.properties["customSpecFile"] as? String
 dependencies {
     // Kotlin
     implementation(kotlin("stdlib"))
-
+    implementation("io.github.cdimascio:dotenv-kotlin:6.4.0")
     // HTTP Client (Ktor)
     implementation("io.ktor:ktor-client-core:$ktorVersion")
     implementation("io.ktor:ktor-client-cio:$ktorVersion")
@@ -98,6 +99,18 @@ tasks.register("updateOpenApiSpec") {
     group = "openai"
     description = "Force download the latest OpenAPI specification"
     dependsOn("downloadOpenApiSpec")
+}
+
+openApiGenerate {
+    generatorName.set("java")
+    inputSpec.set(openApiSpecFile.absolutePath.replace("\\", "/"))
+    outputDir.set(layout.buildDirectory.dir("generated/openapi").get().asFile.absolutePath)
+    packageName.set("com.s1mar.openai")
+}
+
+// Make sure spec exists before generating
+tasks.named("openApiGenerate") {
+    dependsOn("ensureOpenApiSpec")
 }
 
 tasks.test {
