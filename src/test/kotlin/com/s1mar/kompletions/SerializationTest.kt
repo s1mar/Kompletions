@@ -1,4 +1,4 @@
-package com.s1mar.kompletion
+package com.s1mar.kompletions
 
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Test

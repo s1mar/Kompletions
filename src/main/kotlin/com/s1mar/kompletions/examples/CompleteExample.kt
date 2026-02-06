@@ -1,6 +1,6 @@
-package com.s1mar.kompletion.examples
+package com.s1mar.kompletions.examples
 
-import com.s1mar.kompletion.*
+import com.s1mar.kompletions.*
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.runBlocking
 

@@ -1,4 +1,4 @@
-package com.s1mar.kompletion
+package com.s1mar.kompletions
 
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals

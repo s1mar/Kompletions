@@ -1,4 +1,4 @@
-package com.s1mar.kompletion
+package com.s1mar.kompletions
 
 import io.ktor.client.*
 import io.ktor.client.call.*

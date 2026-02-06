@@ -6,7 +6,7 @@ plugins {
     id("org.openapi.generator") version "7.19.0"
 }
 
-group = "com.s1mar.kompletion"
+group = "com.s1mar.kompletions"
 version = "1.0-SNAPSHOT"
 
 repositories {

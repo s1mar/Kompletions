@@ -33,7 +33,7 @@ Add as a composite build or publish to a local Maven repo:
 
 ```kotlin
 // settings.gradle.kts
-includeBuild("path/to/Kompletion")
+includeBuild("path/to/Kompletions")
 ```
 
 ## Quick Start
@@ -154,7 +154,7 @@ val client = KompletionClient(
 
 ## Error Handling
 
-All Kompletion errors extend `KompletionException`:
+All Kompletions errors extend `KompletionException`:
 
 ```kotlin
 try {
@@ -163,7 +163,7 @@ try {
     // HTTP error from the API (e.g., 401, 429, 500)
     println("HTTP ${e.statusCode}: ${e.responseBody}")
 } catch (e: KompletionException) {
-    // Other Kompletion errors (e.g., no choices returned)
+    // Other Kompletions errors (e.g., no choices returned)
     println("Error: ${e.message}")
 }
 ```
@@ -220,7 +220,7 @@ ChatResponse
 
 ## OpenAPI Generated Models
 
-On build, Kompletion generates Kotlin data classes from the official OpenAI OpenAPI spec using `kotlinx.serialization`. These models live in `com.s1mar.openai.models` and cover the full API surface. For most use cases, the built-in DSL types (`ChatRequest`, `ChatResponse`) are simpler and sufficient.
+On build, Kompletions generates Kotlin data classes from the official OpenAI OpenAPI spec using `kotlinx.serialization`. These models live in `com.s1mar.openai.models` and cover the full API surface. For most use cases, the built-in DSL types (`ChatRequest`, `ChatResponse`) are simpler and sufficient.
 
 ## License
 
