@@ -2,6 +2,7 @@ package com.s1mar.kompletions
 
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 
@@ -10,17 +11,17 @@ data class ChatRequest(
     val model: String,
     val messages: List<Message>,
     val temperature: Double? = null,
-    val max_tokens: Int? = null,
-    val top_p: Double? = null,
-    val frequency_penalty: Double? = null,
-    val presence_penalty: Double? = null,
+    @SerialName("max_tokens") val maxTokens: Int? = null,
+    @SerialName("top_p") val topP: Double? = null,
+    @SerialName("frequency_penalty") val frequencyPenalty: Double? = null,
+    @SerialName("presence_penalty") val presencePenalty: Double? = null,
     val stop: List<String>? = null,
     val n: Int? = null,
     val stream: Boolean? = null,
     val user: String? = null,
-    val response_format: ResponseFormat? = null,
+    @SerialName("response_format") val responseFormat: ResponseFormat? = null,
     val tools: List<Tool>? = null,
-    val tool_choice: String? = null
+    @SerialName("tool_choice") val toolChoice: String? = null
 )
 
 @Serializable
@@ -62,14 +63,14 @@ data class ChatResponse(
 data class Choice(
     val index: Int,
     val message: Message,
-    val finish_reason: String? = null
+    @SerialName("finish_reason") val finishReason: String? = null
 )
 
 @Serializable
 data class Usage(
-    val prompt_tokens: Int,
-    val completion_tokens: Int,
-    val total_tokens: Int
+    @SerialName("prompt_tokens") val promptTokens: Int,
+    @SerialName("completion_tokens") val completionTokens: Int,
+    @SerialName("total_tokens") val totalTokens: Int
 )
 
 /**
@@ -91,7 +92,7 @@ suspend fun KompletionClient.sendMessage(
         model = model,
         messages = messages,
         temperature = temperature,
-        max_tokens = maxTokens
+        maxTokens = maxTokens
     )
 
     return chat(request)
@@ -156,16 +157,16 @@ class ChatRequestBuilder {
             model = model,
             messages = messageList,
             temperature = temperature,
-            max_tokens = maxTokens,
-            top_p = topP,
-            frequency_penalty = frequencyPenalty,
-            presence_penalty = presencePenalty,
+            maxTokens = maxTokens,
+            topP = topP,
+            frequencyPenalty = frequencyPenalty,
+            presencePenalty = presencePenalty,
             stop = stop,
             user = endUser,
             n = n,
-            response_format = responseFormat,
+            responseFormat = responseFormat,
             tools = tools,
-            tool_choice = toolChoice
+            toolChoice = toolChoice
         )
     }
 }
@@ -242,17 +243,19 @@ class Conversation(
     }
 
     /** Inject a message into the history without making an API call. */
-    fun addMessage(role: String, content: String? = null, name: String? = null) {
+    suspend fun addMessage(role: String, content: String? = null, name: String? = null) = sendMutex.withLock {
         messages.add(Message(role, content, name))
     }
 
     /** Remove all messages from the history. */
-    fun clearHistory() {
+    suspend fun clearHistory() = sendMutex.withLock {
         messages.clear()
     }
 
     /** Returns a snapshot of the current message history. */
-    fun getHistory(): List<Message> = messages.toList()
+    suspend fun getHistory(): List<Message> = sendMutex.withLock {
+        messages.toList()
+    }
 }
 
 /**

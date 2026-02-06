@@ -33,7 +33,7 @@ suspend fun simpleMessage(client: KompletionClient) {
     )
 
     println("Response: ${response.choices.first().message.content}")
-    println("Tokens used: ${response.usage?.total_tokens}")
+    println("Tokens used: ${response.usage?.totalTokens}")
 }
 
 suspend fun dslBuilder(client: KompletionClient) {
@@ -92,8 +92,8 @@ suspend fun directRequestResponse(client: KompletionClient) {
             Message("user", "Create a simple JSON object with name and age")
         ),
         temperature = 0.5,
-        max_tokens = 100,
-        response_format = ResponseFormat("json_object")
+        maxTokens = 100,
+        responseFormat = ResponseFormat("json_object")
     )
 
     val response = client.chat(request)
@@ -101,6 +101,6 @@ suspend fun directRequestResponse(client: KompletionClient) {
     println("ID: ${response.id}")
     println("Model: ${response.model}")
     println("Response: ${response.choices.first().message.content}")
-    println("Finish reason: ${response.choices.first().finish_reason}")
+    println("Finish reason: ${response.choices.first().finishReason}")
     println("Usage: ${response.usage}")
 }

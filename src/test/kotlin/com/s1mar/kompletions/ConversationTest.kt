@@ -143,7 +143,7 @@ class ConversationTest {
 
         assertEquals("resp-42", response.id)
         assertEquals("Hello!", response.choices.first().message.content)
-        assertEquals("stop", response.choices.first().finish_reason)
+        assertEquals("stop", response.choices.first().finishReason)
     }
 
     @Test
@@ -170,7 +170,7 @@ class ConversationTest {
     }
 
     @Test
-    fun `initialHistory with systemPrompt does not duplicate system message`() {
+    fun `initialHistory with systemPrompt does not duplicate system message`() = runTest {
         val history = listOf(
             Message("system", "Existing system prompt"),
             Message("user", "Hello"),
@@ -190,7 +190,7 @@ class ConversationTest {
     }
 
     @Test
-    fun `initialHistory without system message gets systemPrompt prepended`() {
+    fun `initialHistory without system message gets systemPrompt prepended`() = runTest {
         val history = listOf(
             Message("user", "Hello"),
             Message("assistant", "Hi!"),
@@ -211,7 +211,7 @@ class ConversationTest {
     }
 
     @Test
-    fun `addMessage injects message without API call`() {
+    fun `addMessage injects message without API call`() = runTest {
         val conversation = Conversation(
             client = KompletionClient(KompletionConfig.custom("http://localhost")),
             model = "test"
@@ -227,7 +227,7 @@ class ConversationTest {
     }
 
     @Test
-    fun `clearHistory removes all messages`() {
+    fun `clearHistory removes all messages`() = runTest {
         val conversation = Conversation(
             client = KompletionClient(KompletionConfig.custom("http://localhost")),
             model = "test",

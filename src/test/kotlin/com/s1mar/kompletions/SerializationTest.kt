@@ -18,7 +18,7 @@ class SerializationTest {
             model = "gpt-4",
             messages = listOf(Message("user", "Hello")),
             temperature = 0.7,
-            max_tokens = 100
+            maxTokens = 100
         )
 
         val encoded = json.encodeToString(ChatRequest.serializer(), request)
@@ -27,7 +27,7 @@ class SerializationTest {
         assertEquals(request.model, decoded.model)
         assertEquals(request.messages, decoded.messages)
         assertEquals(request.temperature, decoded.temperature)
-        assertEquals(request.max_tokens, decoded.max_tokens)
+        assertEquals(request.maxTokens, decoded.maxTokens)
     }
 
     @Test
@@ -79,10 +79,10 @@ class SerializationTest {
         assertEquals(1, response.choices.size)
         assertEquals("assistant", response.choices[0].message.role)
         assertEquals("Hello!", response.choices[0].message.content)
-        assertEquals("stop", response.choices[0].finish_reason)
-        assertEquals(10, response.usage?.prompt_tokens)
-        assertEquals(5, response.usage?.completion_tokens)
-        assertEquals(15, response.usage?.total_tokens)
+        assertEquals("stop", response.choices[0].finishReason)
+        assertEquals(10, response.usage?.promptTokens)
+        assertEquals(5, response.usage?.completionTokens)
+        assertEquals(15, response.usage?.totalTokens)
     }
 
     @Test
@@ -161,7 +161,7 @@ class SerializationTest {
 
         assertEquals("chatcmpl-123", chunk.id)
         assertEquals("Hello", chunk.choices[0].delta.content)
-        assertNull(chunk.choices[0].finish_reason)
+        assertNull(chunk.choices[0].finishReason)
     }
 
     @Test
@@ -195,7 +195,7 @@ class SerializationTest {
                     )
                 )
             ),
-            tool_choice = "auto"
+            toolChoice = "auto"
         )
 
         val encoded = json.encodeToString(ChatRequest.serializer(), request)
@@ -203,6 +203,6 @@ class SerializationTest {
 
         assertEquals(1, decoded.tools?.size)
         assertEquals("get_weather", decoded.tools?.first()?.function?.name)
-        assertEquals("auto", decoded.tool_choice)
+        assertEquals("auto", decoded.toolChoice)
     }
 }

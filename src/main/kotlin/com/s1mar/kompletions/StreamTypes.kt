@@ -1,5 +1,6 @@
 package com.s1mar.kompletions
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -16,7 +17,7 @@ data class ChatCompletionChunk(
 data class ChunkChoice(
     val index: Int,
     val delta: ChunkDelta,
-    val finish_reason: String? = null
+    @SerialName("finish_reason") val finishReason: String? = null
 )
 
 @Serializable

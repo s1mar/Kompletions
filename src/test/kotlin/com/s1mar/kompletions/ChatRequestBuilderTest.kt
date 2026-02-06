@@ -57,15 +57,15 @@ class ChatRequestBuilderTest {
         }.build()
 
         assertEquals(0.5, request.temperature)
-        assertEquals(100, request.max_tokens)
-        assertEquals(0.9, request.top_p)
-        assertEquals(0.1, request.frequency_penalty)
-        assertEquals(0.2, request.presence_penalty)
+        assertEquals(100, request.maxTokens)
+        assertEquals(0.9, request.topP)
+        assertEquals(0.1, request.frequencyPenalty)
+        assertEquals(0.2, request.presencePenalty)
         assertEquals(listOf("END"), request.stop)
         assertEquals("user-123", request.user)
         assertEquals(2, request.n)
-        assertEquals("json_object", request.response_format?.type)
-        assertEquals("auto", request.tool_choice)
+        assertEquals("json_object", request.responseFormat?.type)
+        assertEquals("auto", request.toolChoice)
     }
 
     @Test
@@ -105,17 +105,17 @@ class ChatRequestBuilderTest {
         }.build()
 
         assertNull(request.temperature)
-        assertNull(request.max_tokens)
-        assertNull(request.top_p)
-        assertNull(request.frequency_penalty)
-        assertNull(request.presence_penalty)
+        assertNull(request.maxTokens)
+        assertNull(request.topP)
+        assertNull(request.frequencyPenalty)
+        assertNull(request.presencePenalty)
         assertNull(request.stop)
         assertNull(request.n)
         assertNull(request.stream)
         assertNull(request.user)
-        assertNull(request.response_format)
+        assertNull(request.responseFormat)
         assertNull(request.tools)
-        assertNull(request.tool_choice)
+        assertNull(request.toolChoice)
     }
 
     @Test

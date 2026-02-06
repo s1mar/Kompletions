@@ -94,14 +94,45 @@ class KompletionClient(
             }
 
             val channel: ByteReadChannel = response.bodyAsChannel()
+            val buffer = StringBuilder()
+
             while (!channel.isClosedForRead) {
                 val line = channel.readUTF8Line() ?: break
-                val trimmed = line.trim()
-                if (trimmed.startsWith("data: ")) {
-                    val data = trimmed.removePrefix("data: ").trim()
-                    if (data == "[DONE]") return@execute
-                    val chunk = json.decodeFromString(ChatCompletionChunk.serializer(), data)
-                    emit(chunk)
+                
+                if (line.isEmpty()) {
+                    if (buffer.isNotEmpty()) {
+                        val data = buffer.toString()
+                        buffer.clear()
+                        
+                        if (data == "[DONE]") return@execute
+                        
+                        try {
+                            val chunk = json.decodeFromString(ChatCompletionChunk.serializer(), data)
+                            emit(chunk)
+                        } catch (_: Exception) {
+                        }
+                    }
+                } else if (line.startsWith("data:")) {
+                    val data = line.removePrefix("data:")
+                    val cleanedData = if (data.startsWith(" ")) data.substring(1) else data
+                    
+                    if (buffer.isNotEmpty()) {
+                        buffer.append("\n")
+                    }
+                    buffer.append(cleanedData)
+                }
+            }
+            
+            // Flush remaining buffer if any (e.g. if stream ended without a final newline)
+            if (buffer.isNotEmpty()) {
+                val data = buffer.toString()
+                if (data != "[DONE]") {
+                    try {
+                        val chunk = json.decodeFromString(ChatCompletionChunk.serializer(), data)
+                        emit(chunk)
+                    } catch (e: Exception) {
+                        // Ignore
+                    }
                 }
             }
         }
