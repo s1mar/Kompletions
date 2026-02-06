@@ -1,6 +1,7 @@
 package com.s1mar.kompletion.examples
 
 import com.s1mar.kompletion.*
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.runBlocking
 
 fun main() = runBlocking {
@@ -14,7 +15,10 @@ fun main() = runBlocking {
         println("\n=== Example 3: Conversation (with history) ===")
         conversationExample(client)
 
-        println("\n=== Example 4: Direct request/response ===")
+        println("\n=== Example 4: Streaming ===")
+        streamingExample(client)
+
+        println("\n=== Example 5: Direct request/response ===")
         directRequestResponse(client)
     }
 }
@@ -61,6 +65,23 @@ suspend fun conversationExample(client: KompletionClient) {
     conv.getHistory().forEach { msg ->
         println("${msg.role}: ${msg.content}")
     }
+}
+
+suspend fun streamingExample(client: KompletionClient) {
+    print("Streaming: ")
+    client.streamChatCompletion {
+        model = "gemma3:4b"
+        maxTokens = 100
+
+        system("You are a helpful assistant. Keep responses concise.")
+        user("Explain what coroutines are in Kotlin.")
+    }.collect { chunk ->
+        chunk.choices.firstOrNull()?.delta?.content?.let {
+            print(it)
+            System.out.flush()
+        }
+    }
+    println()
 }
 
 suspend fun directRequestResponse(client: KompletionClient) {
